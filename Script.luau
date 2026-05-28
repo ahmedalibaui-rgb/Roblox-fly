@@ -1,18 +1,19 @@
+loadstring([[
 --!strict
 local Players: Players = game:GetService("Players")
 local UserInputService: UserInputService = game:GetService("UserInputService")
 local RunService: RunService = game:GetService("RunService")
-local TweenService: TweenService = game:GetService("TweenService")
+local CoreGui: CoreGui = game:GetService("CoreGui")
 
 local localPlayer: Player = Players.LocalPlayer
 local character: Model = localPlayer.Character or localPlayer.CharacterAdded:Wait()
 local humanoidRootPart: BasePart = character:WaitForChild("HumanoidRootPart") :: BasePart
 
--- State variables
+-- State tracking
 local isFlying: boolean = false
 local flySpeed: number = 60
 
--- Physics setup
+-- Physics elements setup
 local bodyVelocity: BodyVelocity = Instance.new("BodyVelocity")
 bodyVelocity.MaxForce = Vector3.new(0, 0, 0)
 bodyVelocity.Velocity = Vector3.new(0, 0, 0)
@@ -23,21 +24,37 @@ bodyGyro.MaxTorque = Vector3.new(0, 0, 0)
 bodyGyro.CFrame = humanoidRootPart.CFrame
 bodyGyro.Parent = humanoidRootPart
 
+-- Refresh physical elements on character respawn
 localPlayer.CharacterAdded:Connect(function(newCharacter: Model)
 	character = newCharacter
 	humanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart") :: BasePart
 	bodyVelocity.Parent = humanoidRootPart
 	bodyGyro.Parent = humanoidRootPart
+	if isFlying then
+		bodyVelocity.MaxForce = Vector3.new(4e4, 4e4, 4e4)
+		bodyGyro.MaxTorque = Vector3.new(4e4, 4e4, 4e4)
+	end
 end)
 
--- Screen UI creation
+-- Clean up any prior execution interfaces
+local existingUI: Instance? = CoreGui:FindFirstChild("FlightControlUI") or localPlayer:WaitForChild("PlayerGui"):FindFirstChild("FlightControlUI")
+if existingUI then existingUI:Destroy() end
+
+-- Generate independent ScreenGui container
 local screenGui: ScreenGui = Instance.new("ScreenGui")
 screenGui.Name = "FlightControlUI"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+-- Fallback check for execution environments
+local success: boolean, targetParent: any = pcall(function() return CoreGui end)
+if success and targetParent then
+	screenGui.Parent = CoreGui
+else
+	screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+end
 
 local mainFrame: Frame = Instance.new("Frame")
-mainFrame.Size = UUDim2.new(0, 200, 0, 150)
+mainFrame.Size = UDim2.new(0, 200, 0, 150)
 mainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
@@ -110,9 +127,10 @@ local incCorner: UICorner = Instance.new("UICorner")
 incCorner.CornerRadius = UDim.new(0, 4)
 incCorner.Parent = increaseButton
 
--- Toggle mechanic logic
 local function setFlightState(state: boolean): ()
 	isFlying = state
+	if not humanoidRootPart or not humanoidRootPart.Parent then return end
+	
 	if isFlying then
 		bodyVelocity.MaxForce = Vector3.new(4e4, 4e4, 4e4)
 		bodyGyro.MaxTorque = Vector3.new(4e4, 4e4, 4e4)
@@ -145,7 +163,6 @@ decreaseButton.MouseButton1Click:Connect(function()
 	speedLabel.Text = "Speed: " .. tostring(flySpeed)
 end)
 
--- Handling hotkey (E) alignment with UI state
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean): ()
 	if gameProcessed then return end
 	if input.KeyCode == Enum.KeyCode.E then
@@ -153,9 +170,8 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 end)
 
--- Physics looping
 RunService.RenderStepped:Connect(function(): ()
-	if not isFlying or not character or not humanoidRootPart then return end
+	if not isFlying or not character or not humanoidRootPart or not humanoidRootPart.Parent then return end
 
 	local humanoid: Humanoid? = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
@@ -195,3 +211,4 @@ RunService.RenderStepped:Connect(function(): ()
 
 	bodyGyro.CFrame = cameraCFrame
 end)
+]])()
