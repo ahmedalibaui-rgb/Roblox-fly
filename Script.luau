@@ -9,43 +9,53 @@ local localPlayer: Player = Players.LocalPlayer
 local character: Model = localPlayer.Character or localPlayer.CharacterAdded:Wait()
 local humanoidRootPart: BasePart = character:WaitForChild("HumanoidRootPart") :: BasePart
 
--- State tracking
+-- Configuration
 local isFlying: boolean = false
 local flySpeed: number = 60
 
--- Physics elements setup
-local bodyVelocity: BodyVelocity = Instance.new("BodyVelocity")
-bodyVelocity.MaxForce = Vector3.new(0, 0, 0)
-bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-bodyVelocity.Parent = humanoidRootPart
+-- Setup Modern Physics constraints (MoverConstraint updates)
+local attachment: Attachment = Instance.new("Attachment")
+attachment.Name = "FlightAttachment"
+attachment.Parent = humanoidRootPart
 
-local bodyGyro: BodyGyro = Instance.new("BodyGyro")
-bodyGyro.MaxTorque = Vector3.new(0, 0, 0)
-bodyGyro.CFrame = humanoidRootPart.CFrame
-bodyGyro.Parent = humanoidRootPart
+local linearVelocity: LinearVelocity = Instance.new("LinearVelocity")
+linearVelocity.Attachment0 = attachment
+linearVelocity.MaxForce = 0
+linearVelocity.VectorVelocity = Vector3.new(0, 0, 0)
+linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+linearVelocity.Parent = humanoidRootPart
 
--- Refresh physical elements on character respawn
+local alignOrientation: AlignOrientation = Instance.new("AlignOrientation")
+alignOrientation.Attachment0 = attachment
+alignOrientation.MaxTorque = 0
+alignOrientation.Responsive = true
+alignOrientation.RigidityEnabled = true
+alignOrientation.Mode = Enum.OrientationMode.OneAttachment
+alignOrientation.Parent = humanoidRootPart
+
+-- Handle Respawning
 localPlayer.CharacterAdded:Connect(function(newCharacter: Model)
 	character = newCharacter
 	humanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart") :: BasePart
-	bodyVelocity.Parent = humanoidRootPart
-	bodyGyro.Parent = humanoidRootPart
+	
+	attachment.Parent = humanoidRootPart
+	linearVelocity.Parent = humanoidRootPart
+	alignOrientation.Parent = humanoidRootPart
+	
 	if isFlying then
-		bodyVelocity.MaxForce = Vector3.new(4e4, 4e4, 4e4)
-		bodyGyro.MaxTorque = Vector3.new(4e4, 4e4, 4e4)
+		linearVelocity.MaxForce = math.huge
+		alignOrientation.MaxTorque = math.huge
 	end
 end)
 
--- Clean up any prior execution interfaces
+-- UI Setup
 local existingUI: Instance? = CoreGui:FindFirstChild("FlightControlUI") or localPlayer:WaitForChild("PlayerGui"):FindFirstChild("FlightControlUI")
 if existingUI then existingUI:Destroy() end
 
--- Generate independent ScreenGui container
 local screenGui: ScreenGui = Instance.new("ScreenGui")
 screenGui.Name = "FlightControlUI"
 screenGui.ResetOnSpawn = false
 
--- Fallback check for execution environments
 local success: boolean, targetParent: any = pcall(function() return CoreGui end)
 if success and targetParent then
 	screenGui.Parent = CoreGui
@@ -69,7 +79,7 @@ uiCorner.Parent = mainFrame
 local titleLabel: TextLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, 0, 0, 30)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Flight Control"
+titleLabel.Text = "Flight Control v2"
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.Font = Enum.Font.SourceSansBold
 titleLabel.TextSize = 16
@@ -132,14 +142,14 @@ local function setFlightState(state: boolean): ()
 	if not humanoidRootPart or not humanoidRootPart.Parent then return end
 	
 	if isFlying then
-		bodyVelocity.MaxForce = Vector3.new(4e4, 4e4, 4e4)
-		bodyGyro.MaxTorque = Vector3.new(4e4, 4e4, 4e4)
+		linearVelocity.MaxForce = math.huge
+		alignOrientation.MaxTorque = math.huge
 		toggleButton.Text = "Fly: ON"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
 	else
-		bodyVelocity.MaxForce = Vector3.new(0, 0, 0)
-		bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-		bodyGyro.MaxTorque = Vector3.new(0, 0, 0)
+		linearVelocity.MaxForce = 0
+		linearVelocity.VectorVelocity = Vector3.new(0, 0, 0)
+		alignOrientation.MaxTorque = 0
 		toggleButton.Text = "Fly: OFF"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 		local humanoid: Humanoid? = character:FindFirstChildOfClass("Humanoid")
@@ -204,11 +214,11 @@ RunService.RenderStepped:Connect(function(): ()
 	end
 
 	if movementVector.Magnitude > 0 then
-		bodyVelocity.Velocity = movementVector.Unit * flySpeed
+		linearVelocity.VectorVelocity = movementVector.Unit * flySpeed
 	else
-		bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+		linearVelocity.VectorVelocity = Vector3.new(0, 0, 0)
 	end
 
-	bodyGyro.CFrame = cameraCFrame
+	alignOrientation.CFrame = cameraCFrame
 end)
 ]])()
